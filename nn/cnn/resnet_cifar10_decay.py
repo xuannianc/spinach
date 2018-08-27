@@ -15,73 +15,69 @@ import argparse
 import sys
 import os
 
-# set a high recursion limit so Theano doesn’t complain
-sys.setrecursionlimit(5000)
 # define the total number of epochs to train for along with the
 # initial learning rate
 NUM_EPOCHS = 100
 INIT_LR = 1e-1
 
 
-def poly_decay(epoch):
+def poly_decay(epoch, lr):
     # initialize the maximum number of epochs, base learning rate,
     # and power of the polynomial
-    maxEpochs = NUM_EPOCHS
-    baseLR = INIT_LR
+    max_epochs = NUM_EPOCHS
+    base_lr = INIT_LR
     power = 1.0
     # compute the new learning rate based on polynomial decay
-    alpha = baseLR * (1 - (epoch / float(maxEpochs))) ** power
+    new_lr = base_lr * (1 - (epoch / float(max_epochs))) ** power
     # return the new learning rate
-    return alpha
+    return new_lr
 
 
 # construct the argument parse and parse the arguments
-ap = argparse.ArgumentParser()
-ap.add_argument("-m", "--model", required=True,
-                help="path to output model")
-ap.add_argument("-o", "--output", required=True,
-                help="path to output directory (logs, plots, etc.)")
-args = vars(ap.parse_args())
+# ap = argparse.ArgumentParser()
+# ap.add_argument("-m", "--model", required=True,
+#                 help="path to output model")
+# ap.add_argument("-o", "--output", required=True,
+#                 help="path to output directory (logs, plots, etc.)")
+# args = vars(ap.parse_args())
+MODEL_PATH = 'checkpoints/resnet_100_decay.hdf5'
 
 # load the training and testing data, converting the images from
 # integers to floats
 print("[INFO] loading CIFAR-10 data...")
-((trainX, trainY), (testX, testY)) = cifar10.load_data()
-trainX = trainX.astype("float")
-testX = testX.astype("float")
+((x_train, y_train), (x_test, y_test)) = cifar10.load_data()
+x_train = x_train.astype("float")
+x_test = x_test.astype("float")
 # apply mean subtraction to the data
-mean = np.mean(trainX, axis=0)
-trainX -= mean
-testX -= mean
+# shape 为 (32,32,3)
+mean = np.mean(x_train, axis=0)
+x_train -= mean
+x_test -= mean
 # convert the labels from integers to vectors
 lb = LabelBinarizer()
-trainY = lb.fit_transform(trainY)
-testY = lb.transform(testY)
+trainY = lb.fit_transform(y_train)
+testY = lb.transform(y_test)
 # construct the image generator for data augmentation
 aug = ImageDataGenerator(width_shift_range=0.1,
                          height_shift_range=0.1, horizontal_flip=True,
                          fill_mode="nearest")
 # construct the set of callbacks
-figPath = os.path.sep.join([args["output"], "{}.png".format(
-    os.getpid())])
-jsonPath = os.path.sep.join([args["output"], "{}.json".format(
-    os.getpid())])
-callbacks = [TrainingMonitor(figPath, jsonPath=jsonPath),
+callbacks = [TrainingMonitor(fig_path='resnet56_cifar10.jpg', json_path='resnet56_cifar10.json'),
              LearningRateScheduler(poly_decay)]
 # initialize the optimizer and model (ResNet-56)
 print("[INFO] compiling model...")
 opt = SGD(lr=INIT_LR, momentum=0.9)
 model = ResNet.build(32, 32, 3, 10, (9, 9, 9),
-                     (64, 64, 128, 256), reg=0.0005)
+                     (64, 64, 128, 256), regularization=0.0005)
 model.compile(loss="categorical_crossentropy", optimizer=opt,
               metrics=["accuracy"])
 # train the network
 print("[INFO] training network...")
 model.fit_generator(
-    aug.flow(trainX, trainY, batch_size=128),
-    validation_data=(testX, testY),
-    steps_per_epoch=len(trainX) // 128, epochs=10,
+    aug.flow(x_train, y_train, batch_size=128),
+    validation_data=(x_test, y_test),
+    steps_per_epoch=len(x_train) // 128, epochs=NUM_EPOCHS,
     callbacks=callbacks, verbose=1)
 # save the network to disk
 print("[INFO] serializing network...")
-model.save(args["model"])
+model.save(MODEL_PATH)
