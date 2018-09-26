@@ -106,3 +106,7 @@ venv.bak/
 *.hdf5
 *.h5
 *.caffemodel
+object_detection/
+*.mp4
+models/
+images/
